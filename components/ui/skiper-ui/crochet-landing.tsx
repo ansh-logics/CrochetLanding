@@ -80,13 +80,12 @@ const CrochetLanding = () => {
       className="mx-auto flex w-screen flex-col items-center bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] px-4 text-[#8B4513] pb-0"
     >
       <div className="h-full mt-12 md:mt-20 lg:mt-32 relative flex w-fit flex-col items-center justify-center gap-3 md:gap-5 text-center mb-8 md:mb-16">
-        <h1 className="font-serif relative z-10 text-4xl sm:text-5xl md:text-7xl lg:text-9xl font-medium tracking-[-0.08em] text-[#8B4513] px-2">
-          Fuzzy Loopz<br /> 
-          <span className="text-[#CD853F] italic">Handrafted Crochet</span> <br />
-          Creations
+        <h1 className="font-serif mr-[20vw] relative z-10 text-4xl sm:text-5xl md:text-7xl lg:text-9xl font-medium tracking-[-0.08em] text-[#8B4513] px-2">
+          Fuzzy<br /> 
+          <span className=" ml-[30vw] text-[#CD853F] italic text-[20vw] tangerine-bold">Loopz</span> <br />
         </h1>
         <p className="font-sans relative z-10 max-w-2xl text-base sm:text-lg md:text-xl font-medium text-[#A0522D] px-4">
-          Each stitch tells a story of tradition, comfort, and artistry
+          Where Every Stitch Tells a Story of Comfort & Joy
         </p>
 
         <CrochetThreadPath
@@ -186,7 +185,7 @@ const CrochetLanding = () => {
               Our Story
             </h2>
             <p className="text-base md:text-lg text-[#A0522D] mb-4 md:mb-6 leading-relaxed">
-              Started as a family passion in 2020, CrochetCraft has grown into a beloved brand 
+              Started as a family passion in 2020, FuzzyLoopz has grown into a beloved brand 
               that celebrates the timeless art of crochet. Each piece is carefully handcrafted 
               with premium yarns and attention to detail.
             </p>
@@ -216,7 +215,7 @@ const CrochetLanding = () => {
         className="mt-20 md:mt-32 w-full max-w-6xl mx-auto px-4 relative z-10"
       >
         <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-[#8B4513] text-center mb-10 md:mb-16">
-          Why Choose CrochetCraft
+          Why Choose FuzzyLoopz
         </h2>
         <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
           <FeatureCard 
@@ -299,7 +298,7 @@ const CrochetLanding = () => {
           
           <div className="max-w-6xl mx-auto px-4">
             <h1 className="text-center text-[12vw] sm:text-[8vw] lg:text-[6vw] font-bold leading-[0.9] tracking-tighter mb-12 relative z-10">
-              CrochetCraft
+              FuzzyLoopz
             </h1>
             
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12 relative z-10">
@@ -346,13 +345,13 @@ const CrochetLanding = () => {
             
             <div className="border-t border-[#A0522D]/30 pt-8 flex flex-col md:flex-row justify-between items-center text-sm relative z-10">
               <div className="flex items-center gap-8 mb-4 md:mb-0">
-                <p>© 2025 CrochetCraft. All rights reserved.</p>
+                <p>© 2025 FuzzyLoopz. All rights reserved.</p>
                 <p>Handmade with love since 2020</p>
               </div>
               <div className="flex items-center gap-6">
                 <a href="#" className="hover:text-[#F4A460] transition-colors">Privacy Policy</a>
                 <a href="#" className="hover:text-[#F4A460] transition-colors">Terms of Service</a>
-                <p>contact@crochetcraft.com</p>
+                <p>contact@fuzzyloopz.com</p>
               </div>
             </div>
           </div>
@@ -388,6 +387,8 @@ const ProductCard = ({
           src={image} 
           alt={title}
           className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
+          width={280}
+          height={176}
         />
         {/* Themed icon overlay */}
         <div className="absolute top-2 md:top-3 right-2 md:right-3 w-8 md:w-10 h-8 md:h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center">
