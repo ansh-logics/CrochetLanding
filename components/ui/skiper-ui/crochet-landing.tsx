@@ -164,10 +164,10 @@ const CrochetLanding = () => {
 
         {/* Show More Button */}
         <div className="flex justify-center md:justify-end mt-4 md:mt-6">
-          <button className="bg-[#8B4513] text-[#FFF8F0] px-4 md:px-6 py-2 md:py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center gap-2 group text-sm md:text-base">
+          <a href="/catalog" className="bg-[#8B4513] text-[#FFF8F0] px-4 md:px-6 py-2 md:py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center gap-2 group text-sm md:text-base">
             View Full Catalog
             <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
+          </a>
         </div>
       </div>
 
