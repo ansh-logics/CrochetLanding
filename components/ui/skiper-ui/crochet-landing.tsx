@@ -3,6 +3,8 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import React, { useRef, useState } from "react";
 import Image from "next/image";
+import { useProducts, Product } from "@/hooks/useProducts";
+import Link from "next/link";
 
 const CrochetLanding = () => {
   const ref = useRef<HTMLDivElement>(null);
@@ -12,49 +14,14 @@ const CrochetLanding = () => {
     target: ref,
   });
 
-  const products = [
-    {
-      title: "Cozy Blankets",
-      description: "Warm, soft blankets perfect for any season",
-      price: "$89 - $159",
-      image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&h=300&fit=crop&crop=center"
-    },
-    {
-      title: "Baby Sets",
-      description: "Adorable outfits and accessories for little ones",
-      price: "$45 - $75",
-      image: "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=400&h=300&fit=crop&crop=center"
-    },
-    {
-      title: "Home Decor",
-      description: "Beautiful pieces to brighten up your living space",
-      price: "$25 - $95",
-      image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop&crop=center"
-    },
-    {
-      title: "Scarves & Shawls",
-      description: "Elegant accessories for every occasion",
-      price: "$35 - $80",
-      image: "https://images.unsplash.com/photo-1601924994987-69e26d50dc26?w=400&h=300&fit=crop&crop=center"
-    },
-    {
-      title: "Amigurumi Toys",
-      description: "Adorable handcrafted stuffed animals and dolls",
-      price: "$25 - $60",
-      image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop&crop=center"
-    },
-    {
-      title: "Kitchen Sets",
-      description: "Pot holders, dishcloths, and kitchen accessories",
-      price: "$15 - $45",
-      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=300&fit=crop&crop=center"
-    }
-  ];
+  // Fetch products from backend - limit to 6 for featured section
+  const { products, loading, error } = useProducts(1, 6);
 
+  // For carousel calculations
   const totalSlides = Math.ceil(products.length / 3); // Show 3 products at a time
 
   const scrollToSlide = (slideIndex: number) => {
-    if (carouselRef.current) {
+    if (carouselRef.current && totalSlides > 0) {
       const scrollAmount = slideIndex * (carouselRef.current.scrollWidth / totalSlides);
       carouselRef.current.scrollTo({
         left: scrollAmount,
@@ -65,13 +32,17 @@ const CrochetLanding = () => {
   };
 
   const nextSlide = () => {
-    const next = currentSlide < totalSlides - 1 ? currentSlide + 1 : 0;
-    scrollToSlide(next);
+    if (totalSlides > 0) {
+      const next = currentSlide < totalSlides - 1 ? currentSlide + 1 : 0;
+      scrollToSlide(next);
+    }
   };
 
   const prevSlide = () => {
-    const prev = currentSlide > 0 ? currentSlide - 1 : totalSlides - 1;
-    scrollToSlide(prev);
+    if (totalSlides > 0) {
+      const prev = currentSlide > 0 ? currentSlide - 1 : totalSlides - 1;
+      scrollToSlide(prev);
+    }
   };
 
   return (
@@ -96,79 +67,142 @@ const CrochetLanding = () => {
 
       {/* Product Cards Carousel Section */}
       <div className="mt-12 md:mt-20 w-[95%] md:w-[85%] lg:w-[80%] mx-auto relative">
-        {/* Glass-morphism scroll container with navigation */}
-        <div className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm p-1 md:p-2">
-          {/* Left Navigation Button */}
-          <button
-            onClick={prevSlide}
-            className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all duration-300 flex items-center justify-center group"
-          >
-            <ChevronLeftIcon className="w-5 h-5 md:w-6 md:h-6 text-[#8B4513] group-hover:text-[#A0522D] transition-colors" />
-          </button>
-
-          {/* Right Navigation Button */}
-          <button
-            onClick={nextSlide}
-            className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all duration-300 flex items-center justify-center group"
-          >
-            <ChevronRightIcon className="w-5 h-5 md:w-6 md:h-6 text-[#8B4513] group-hover:text-[#A0522D] transition-colors" />
-          </button>
-
-          <div 
-            ref={carouselRef}
-            className="overflow-x-auto overflow-y-hidden scrollbar-none px-12 md:px-16 py-2"
-            style={{
-              maskImage: 'linear-gradient(to right, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
-            }}
-            onScroll={() => {
-              if (carouselRef.current) {
-                const scrollLeft = carouselRef.current.scrollLeft;
-                const slideWidth = carouselRef.current.scrollWidth / totalSlides;
-                const newSlide = Math.round(scrollLeft / slideWidth);
-                setCurrentSlide(newSlide);
-              }
-            }}
-          >
-            <div className="flex gap-3 md:gap-6 pb-4 min-w-max">
-              {products.map((product, index) => (
-                <ProductCard
-                  key={index}
-                  title={product.title}
-                  description={product.description}
-                  price={product.price}
-                  delay={0.1 * (index + 1)}
-                  image={product.image}
-                />
-              ))}
+        {/* Loading State */}
+        {loading && (
+          <div className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm p-1 md:p-2">
+            <div className="px-12 md:px-16 py-2">
+              <div className="flex gap-3 md:gap-6 pb-4 min-w-max">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 md:p-4 shadow-lg w-[240px] md:w-[280px] min-w-[240px] md:min-w-[280px] flex-shrink-0 animate-pulse"
+                  >
+                    <div className="h-36 md:h-44 rounded-xl mb-3 md:mb-4 bg-gradient-to-br from-[#F5DEB3] to-[#DEB887]"></div>
+                    <div className="space-y-1 md:space-y-2">
+                      <div className="h-5 bg-gray-300 rounded w-3/4"></div>
+                      <div className="h-4 bg-gray-300 rounded w-full"></div>
+                      <div className="h-5 bg-gray-300 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          
+        )}
 
-        </div>
+        {/* Error State */}
+        {error && !loading && (
+          <div className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm p-8 text-center">
+            <div className="text-[#A0522D] mb-4">
+              <h3 className="text-xl font-semibold mb-2">Unable to load featured products</h3>
+              <p className="text-sm">{error}</p>
+            </div>
+            <a 
+              href="/catalog" 
+              className="inline-flex items-center gap-2 bg-[#8B4513] text-[#FFF8F0] px-6 py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium"
+            >
+              View Full Catalog
+              <ArrowRightIcon className="w-4 h-4" />
+            </a>
+          </div>
+        )}
 
-        {/* Carousel Dots Indicator */}
-        <div className="flex justify-center mt-6 gap-2">
-          {Array.from({ length: totalSlides }).map((_, index) => (
-            <button
-              key={index}
-              onClick={() => scrollToSlide(index)}
-              className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                currentSlide === index 
-                  ? 'bg-[#8B4513] w-8' 
-                  : 'bg-[#8B4513]/30 hover:bg-[#8B4513]/50'
-              }`}
-            />
-          ))}
-        </div>
+        {/* Products Display */}
+        {!loading && !error && products.length > 0 && (
+          <>
+            {/* Glass-morphism scroll container with navigation */}
+            <div className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm p-1 md:p-2">
+              {/* Left Navigation Button - only show if more than 3 products */}
+              {products.length > 3 && (
+                <button
+                  onClick={prevSlide}
+                  className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all duration-300 flex items-center justify-center group"
+                >
+                  <ChevronLeftIcon className="w-5 h-5 md:w-6 md:h-6 text-[#8B4513] group-hover:text-[#A0522D] transition-colors" />
+                </button>
+              )}
 
-        {/* Show More Button */}
-        <div className="flex justify-center md:justify-end mt-4 md:mt-6">
-          <a href="/catalog" className="bg-[#8B4513] text-[#FFF8F0] px-4 md:px-6 py-2 md:py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center gap-2 group text-sm md:text-base">
-            View Full Catalog
-            <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </a>
-        </div>
+              {/* Right Navigation Button - only show if more than 3 products */}
+              {products.length > 3 && (
+                <button
+                  onClick={nextSlide}
+                  className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 md:w-12 md:h-12 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all duration-300 flex items-center justify-center group"
+                >
+                  <ChevronRightIcon className="w-5 h-5 md:w-6 md:h-6 text-[#8B4513] group-hover:text-[#A0522D] transition-colors" />
+                </button>
+              )}
+
+              <div 
+                ref={carouselRef}
+                className="overflow-x-auto overflow-y-hidden scrollbar-none px-12 md:px-16 py-2"
+                style={{
+                  maskImage: 'linear-gradient(to right, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)',
+                  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 50px, black calc(100% - 50px), transparent 100%)'
+                }}
+                onScroll={() => {
+                  if (carouselRef.current) {
+                    const scrollLeft = carouselRef.current.scrollLeft;
+                    const slideWidth = carouselRef.current.scrollWidth / totalSlides;
+                    const newSlide = Math.round(scrollLeft / slideWidth);
+                    setCurrentSlide(newSlide);
+                  }
+                }}
+              >
+                <div className="flex gap-3 md:gap-6 pb-4 min-w-max">
+                  {products.map((product, index) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      delay={0.1 * (index + 1)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Carousel Dots Indicator - only show if more than 3 products */}
+            {totalSlides > 1 && (
+              <div className="flex justify-center mt-6 gap-2">
+                {Array.from({ length: totalSlides }).map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => scrollToSlide(index)}
+                    className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                      currentSlide === index 
+                        ? 'bg-[#8B4513] w-8' 
+                        : 'bg-[#8B4513]/30 hover:bg-[#8B4513]/50'
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Show More Button */}
+            <div className="flex justify-center md:justify-end mt-4 md:mt-6">
+              <a href="/catalog" className="bg-[#8B4513] text-[#FFF8F0] px-4 md:px-6 py-2 md:py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center gap-2 group text-sm md:text-base">
+                View Full Catalog
+                <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </a>
+            </div>
+          </>
+        )}
+
+        {/* Empty State */}
+        {!loading && !error && products.length === 0 && (
+          <div className="relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm p-8 text-center">
+            <div className="text-[#A0522D] mb-4">
+              <h3 className="text-xl font-semibold mb-2">No Featured Products Yet</h3>
+              <p className="text-sm">Check back soon for new handcrafted items!</p>
+            </div>
+            <a 
+              href="/catalog" 
+              className="inline-flex items-center gap-2 bg-[#8B4513] text-[#FFF8F0] px-6 py-3 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium"
+            >
+              View Full Catalog
+              <ArrowRightIcon className="w-4 h-4" />
+            </a>
+          </div>
+        )}
       </div>
 
       {/* About Section */}
@@ -362,45 +396,51 @@ const CrochetLanding = () => {
 };
 
 const ProductCard = ({
-  title,
-  description,
-  price,
-  delay,
-  image
+  product,
+  delay
 }: {
-  title: string;
-  description: string;
-  price: string;
+  product: Product;
   delay: number;
-  image: string;
 }) => {
+  // Get the main image or use placeholder
+  const mainImage = product.ImageURLs?.[0] || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzk5YTNhZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+  
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 50 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.8, delay }}
-      viewport={{ once: true }}
-      className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 md:p-4 shadow-lg hover:shadow-xl transition-all duration-300 w-[240px] md:w-[280px] min-w-[240px] md:min-w-[280px] flex-shrink-0 group"
-    >
-      <div className="h-36 md:h-44 rounded-xl mb-3 md:mb-4 relative overflow-hidden bg-gradient-to-br from-[#F5DEB3] to-[#DEB887]">
-        <Image 
-          src={image} 
-          alt={title}
-          className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
-          width={280}
-          height={176}
-        />
-        {/* Themed icon overlay */}
-        <div className="absolute top-2 md:top-3 right-2 md:right-3 w-8 md:w-10 h-8 md:h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center">
-          <CrochetIcon className="w-4 md:w-5 h-4 md:h-5 text-[#8B4513]" />
+    <Link href={`/product/${product.id}`}>
+      <motion.div
+        initial={{ opacity: 0, y: 50 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay }}
+        viewport={{ once: true }}
+        className="bg-white/80 backdrop-blur-sm rounded-2xl p-3 md:p-4 shadow-lg hover:shadow-xl transition-all duration-300 w-[240px] md:w-[280px] min-w-[240px] md:min-w-[280px] flex-shrink-0 group cursor-pointer"
+      >
+        <div className="h-36 md:h-44 rounded-xl mb-3 md:mb-4 relative overflow-hidden bg-gradient-to-br from-[#F5DEB3] to-[#DEB887]">
+          <Image 
+            src={mainImage}
+            alt={product.Title}
+            className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
+            width={280}
+            height={176}
+          />
+          {/* Themed icon overlay */}
+          <div className="absolute top-2 md:top-3 right-2 md:right-3 w-8 md:w-10 h-8 md:h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center">
+            <CrochetIcon className="w-4 md:w-5 h-4 md:h-5 text-[#8B4513]" />
+          </div>
         </div>
-      </div>
-      <div className="space-y-1 md:space-y-2">
-        <h3 className="text-base md:text-lg font-bold text-[#8B4513] leading-tight">{title}</h3>
-        <p className="text-[#A0522D] text-xs md:text-sm leading-relaxed">{description}</p>
-        <p className="text-base md:text-lg font-semibold text-[#8B4513]">{price}</p>
-      </div>
-    </motion.div>
+        <div className="space-y-1 md:space-y-2">
+          <h3 className="text-base md:text-lg font-bold text-[#8B4513] leading-tight">{product.Title}</h3>
+          <p className="text-[#A0522D] text-xs md:text-sm leading-relaxed overflow-hidden" style={{ 
+            display: '-webkit-box', 
+            WebkitLineClamp: 2, 
+            WebkitBoxOrient: 'vertical',
+            maxHeight: '2.5rem'
+          }}>
+            {product.Description}
+          </p>
+          <p className="text-base md:text-lg font-semibold text-[#8B4513]">${product.Price}</p>
+        </div>
+      </motion.div>
+    </Link>
   );
 };
 

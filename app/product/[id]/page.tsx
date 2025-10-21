@@ -1,96 +1,128 @@
 "use client";
 
 import { motion } from "framer-motion";
-import React, { useState } from "react";
+import React, { useState, useEffect, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useProduct } from '@/hooks/useProduct';
+import { useCart, CartItem } from '@/contexts/CartContext';
 
-// Product type definition
-type Product = {
-  id: number;
-  name: string;
-  description: string;
-  longDescription: string;
-  price: number;
-  originalPrice?: number;
-  category: string;
-  images: string[];
-  featured?: boolean;
-  inStock: boolean;
-  stockCount: number;
-  customizable: boolean;
-  materials: string[];
-  dimensions: string;
-  careInstructions: string[];
-  colors: string[];
-  sizes?: string[];
-  features: string[];
-  reviews: {
-    rating: number;
-    count: number;
-  };
-};
+interface ProductViewPageProps {
+  params: Promise<{
+    id: string;
+  }>;
+}
 
-// Sample product data - In a real app, this would come from an API
-const sampleProduct: Product = {
-  id: 1,
-  name: "Autumn Sunset Blanket",
-  description: "A warm, luxurious blanket with earthy tones perfect for cozy evenings",
-  longDescription: "Handcrafted with love and attention to detail, our Autumn Sunset Blanket captures the warm, golden hues of a perfect autumn evening. Made with premium organic cotton yarn, this blanket offers exceptional softness and durability. Each stitch tells a story of traditional craftsmanship passed down through generations. The intricate pattern features a blend of warm oranges, deep browns, and golden yellows that will complement any home decor while providing the ultimate in comfort and coziness.",
-  price: 129,
-  originalPrice: 159,
-  category: "Cozy Blankets",
-  images: [
-    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&h=800&fit=crop",
-    "https://images.unsplash.com/photo-1534430480872-3498386e7856?w=800&h=800&fit=crop",
-    "https://images.unsplash.com/photo-1631889993959-41b4e9c6e3c5?w=800&h=800&fit=crop",
-    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=800&fit=crop",
-  ],
-  featured: true,
-  inStock: true,
-  stockCount: 8,
-  customizable: true,
-  materials: ["100% Organic Cotton", "Hypoallergenic Filling", "Natural Dyes"],
-  dimensions: "60\" x 80\" (152cm x 203cm)",
-  careInstructions: [
-    "Machine wash cold on gentle cycle",
-    "Tumble dry low heat",
-    "Do not bleach",
-    "Iron on low if needed"
-  ],
-  colors: ["Autumn Sunset", "Ocean Breeze", "Forest Green", "Rose Gold"],
-  sizes: ["Throw (50\"x60\")", "Twin (60\"x80\")", "Queen (90\"x90\")", "King (108\"x90\")"],
-  features: [
-    "Handcrafted with premium yarns",
-    "Machine washable for easy care",
-    "Hypoallergenic and baby-safe",
-    "Customizable colors available",
-    "Free gift wrapping included"
-  ],
-  reviews: {
-    rating: 4.8,
-    count: 127
-  }
-};
-
-export default function ProductViewPage() {
+export default function ProductViewPage({ params }: ProductViewPageProps) {
+  const resolvedParams = use(params);
+  const { product, loading, error } = useProduct(resolvedParams.id);
+  const { cartCount, addToCart } = useCart();
+  
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [selectedColor, setSelectedColor] = useState(sampleProduct.colors[0]);
-  const [selectedSize, setSelectedSize] = useState(sampleProduct.sizes?.[1] || "");
+  const [selectedColor, setSelectedColor] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<"description" | "care" | "reviews">("description");
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [showAddedToCart, setShowAddedToCart] = useState(false);
+
+  // Set default color when product loads
+  useEffect(() => {
+    if (product && product.Colors.length > 0 && !selectedColor) {
+      setSelectedColor(product.Colors[0]);
+    }
+  }, [product, selectedColor]);
 
   const handleQuantityChange = (change: number) => {
     const newQuantity = quantity + change;
-    if (newQuantity >= 1 && newQuantity <= sampleProduct.stockCount) {
+    if (newQuantity >= 1) {
       setQuantity(newQuantity);
     }
   };
 
+  const handleAddToCart = async () => {
+    if (!product || !selectedColor) return;
+
+    setIsAddingToCart(true);
+
+    const mainImage = product.ImageURLs[0] || '';
+
+    const cartItem: CartItem = {
+      productId: product.id.toString(),
+      name: product.Title,
+      price: product.Price,
+      selectedColor,
+      quantity,
+      image: mainImage,
+    };
+
+    addToCart(cartItem);
+
+    setShowAddedToCart(true);
+    setTimeout(() => setShowAddedToCart(false), 2000);
+    
+    setIsAddingToCart(false);
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] pt-24">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-24 mb-8"></div>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="aspect-square bg-gray-200 rounded-2xl"></div>
+                <div className="grid grid-cols-4 gap-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="aspect-square bg-gray-200 rounded-lg"></div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-6">
+                <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="h-4 bg-gray-200 rounded"></div>
+                  ))}
+                </div>
+                <div className="h-12 bg-gray-200 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] pt-24 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-[#8B4513] mb-4">Product Not Found</h1>
+          <p className="text-[#A0522D] mb-8">{error}</p>
+          <Link 
+            href="/catalog"
+            className="inline-flex items-center gap-2 bg-[#8B4513] text-[#FFF8F0] px-6 py-3 rounded-full hover:bg-[#A0522D] transition-colors"
+          >
+            <ChevronRightIcon className="h-4 w-4 rotate-180" />
+            Back to Catalog
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!product) {
+    return null;
+  }
+
+  const displayImages = product.ImageURLs;
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] pt-24">
-      {/* Breadcrumb Navigation */}
-      {/* Breadcrumb Navigation */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -102,49 +134,31 @@ export default function ProductViewPage() {
           <ChevronRightIcon className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
           <Link href="/catalog" className="hover:text-[#8B4513] transition-colors whitespace-nowrap">Catalog</Link>
           <ChevronRightIcon className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
-          <span className="text-[#8B4513] font-medium truncate">{sampleProduct.name}</span>
+          <span className="text-[#8B4513] font-medium truncate">{product.Title}</span>
         </div>
       </motion.div>
 
       <div className="max-w-7xl mx-auto px-4 pb-16 md:pb-20">
         <div className="grid md:grid-cols-2 gap-6 md:gap-8 lg:gap-12">
-          {/* Product Images */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
             className="space-y-4"
           >
-            {/* Main Image */}
             <div className="relative bg-white/60 backdrop-blur-sm rounded-2xl overflow-hidden shadow-lg border border-white/20">
               <div className="aspect-square relative">
                 <Image
-                  src={sampleProduct.images[selectedImageIndex]}
-                  alt={sampleProduct.name}
+                  src={displayImages[selectedImageIndex] || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzk5YTNhZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='}
+                  alt={product.Title}
                   fill
                   className="object-cover"
                 />
-                
-                {/* Discount Badge */}
-                {sampleProduct.originalPrice && (
-                  <div className="absolute top-4 left-4 bg-[#CD853F] text-white px-3 py-1 rounded-full text-sm font-bold">
-                    Save ${sampleProduct.originalPrice - sampleProduct.price}
-                  </div>
-                )}
-
-                {/* Featured Badge */}
-                {sampleProduct.featured && (
-                  <div className="absolute top-4 right-4 bg-[#8B4513] text-white px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                    <StarIcon className="w-4 h-4 fill-current" />
-                    Featured
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* Thumbnail Images */}
             <div className="grid grid-cols-4 gap-3">
-              {sampleProduct.images.map((image, index) => (
+              {displayImages.map((imageUrl: string, index: number) => (
                 <button
                   key={index}
                   onClick={() => setSelectedImageIndex(index)}
@@ -155,8 +169,8 @@ export default function ProductViewPage() {
                   }`}
                 >
                   <Image
-                    src={image}
-                    alt={`${sampleProduct.name} view ${index + 1}`}
+                    src={imageUrl}
+                    alt={`${product.Title} view ${index + 1}`}
                     fill
                     className="object-cover"
                   />
@@ -165,7 +179,6 @@ export default function ProductViewPage() {
             </div>
           </motion.div>
 
-          {/* Product Details */}
           <motion.div
             initial={{ opacity: 0, x: 30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -175,10 +188,10 @@ export default function ProductViewPage() {
             {/* Product Title and Category */}
             <div>
               <p className="text-sm font-semibold text-[#CD853F] uppercase tracking-wide mb-2">
-                {sampleProduct.category}
+                Handcrafted Item
               </p>
               <h1 className="text-3xl md:text-4xl font-serif font-bold text-[#8B4513] mb-3">
-                {sampleProduct.name}
+                {product.Title}
               </h1>
               
               {/* Reviews */}
@@ -188,32 +201,29 @@ export default function ProductViewPage() {
                     <StarIcon
                       key={i}
                       className={`w-5 h-5 ${
-                        i < Math.floor(sampleProduct.reviews.rating)
+                        i < 4
                           ? "text-[#CD853F] fill-current"
                           : "text-gray-300"
                       }`}
                     />
                   ))}
                 </div>
-                <span className="text-[#8B4513] font-medium">{sampleProduct.reviews.rating}</span>
-                <span className="text-[#A0522D] text-sm">({sampleProduct.reviews.count} reviews)</span>
+                <span className="text-[#8B4513] font-medium">4.5</span>
+                <span className="text-[#A0522D] text-sm">(12 reviews)</span>
               </div>
 
               <p className="text-[#A0522D] leading-relaxed">
-                {sampleProduct.description}
+                {product.Description}
               </p>
             </div>
 
             {/* Pricing */}
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <div className="flex items-baseline gap-3 mb-2">
-                <span className="text-3xl font-bold text-[#8B4513]">${sampleProduct.price}</span>
-                {sampleProduct.originalPrice && (
-                  <span className="text-lg text-[#A0522D] line-through">${sampleProduct.originalPrice}</span>
-                )}
+                <span className="text-3xl font-bold text-[#8B4513]">${product.Price}</span>
               </div>
               <p className="text-sm text-[#A0522D]">
-                Free shipping on orders over $75 • {sampleProduct.stockCount} in stock
+                Free shipping on orders over $75 • In stock
               </p>
             </div>
 
@@ -225,7 +235,7 @@ export default function ProductViewPage() {
                   Color: {selectedColor}
                 </label>
                 <div className="flex gap-2">
-                  {sampleProduct.colors.map((color) => (
+                  {product.Colors.map((color: string) => (
                     <button
                       key={color}
                       onClick={() => setSelectedColor(color)}
@@ -240,30 +250,6 @@ export default function ProductViewPage() {
                   ))}
                 </div>
               </div>
-
-              {/* Size Selection */}
-              {sampleProduct.sizes && (
-                <div>
-                  <label className="block text-[#8B4513] font-medium mb-2">
-                    Size: {selectedSize}
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {sampleProduct.sizes.map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSize(size)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                          selectedSize === size
-                            ? "bg-[#8B4513] text-white shadow-lg"
-                            : "bg-white/80 text-[#8B4513] hover:bg-white hover:shadow-md"
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Quantity Selection */}
               <div>
@@ -281,8 +267,7 @@ export default function ProductViewPage() {
                   </span>
                   <button
                     onClick={() => handleQuantityChange(1)}
-                    disabled={quantity >= sampleProduct.stockCount}
-                    className="w-10 h-10 rounded-full bg-white/80 border border-[#DEB887] flex items-center justify-center hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-10 h-10 rounded-full bg-white/80 border border-[#DEB887] flex items-center justify-center hover:bg-white transition-colors"
                   >
                     <PlusIcon className="w-4 h-4 text-[#8B4513]" />
                   </button>
@@ -292,9 +277,19 @@ export default function ProductViewPage() {
 
             {/* Action Buttons */}
             <div className="space-y-3">
-              <button className="w-full bg-[#8B4513] text-[#FFF8F0] py-3 px-6 rounded-full hover:bg-[#A0522D] transition-all duration-300 font-medium shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+              <button 
+                onClick={handleAddToCart}
+                disabled={isAddingToCart || !selectedColor}
+                className={`w-full py-3 px-6 rounded-full font-medium shadow-lg hover:shadow-xl flex items-center justify-center gap-2 transition-all duration-300 ${
+                  showAddedToCart
+                    ? 'bg-green-600 text-white'
+                    : isAddingToCart || !selectedColor
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-[#8B4513] text-[#FFF8F0] hover:bg-[#A0522D]'
+                }`}
+              >
                 <ShoppingCartIcon className="w-5 h-5" />
-                Add to Cart • ${(sampleProduct.price * quantity).toFixed(0)}
+                {showAddedToCart ? 'Added to Cart!' : isAddingToCart ? 'Adding...' : `Add to Cart • $${(product.Price * quantity).toFixed(0)}`}
               </button>
               
               <div className="grid grid-cols-2 gap-3">
@@ -309,11 +304,26 @@ export default function ProductViewPage() {
               </div>
             </div>
 
+            {/* Cart Counter Display */}
+            {cartCount > 0 && (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-green-800 font-medium">
+                  🛒 {cartCount} item{cartCount !== 1 ? 's' : ''} in cart
+                </p>
+              </div>
+            )}
+
             {/* Features */}
             <div className="bg-white/40 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <h3 className="font-semibold text-[#8B4513] mb-3">Why You'll Love It</h3>
               <ul className="space-y-2">
-                {sampleProduct.features.map((feature, index) => (
+                {[
+                  "Handcrafted with premium yarns",
+                  "Machine washable for easy care", 
+                  "Hypoallergenic and baby-safe",
+                  "Customizable colors available",
+                  "Free gift wrapping included"
+                ].map((feature, index) => (
                   <li key={index} className="flex items-center gap-2 text-sm text-[#A0522D]">
                     <CheckIcon className="w-4 h-4 text-[#CD853F] flex-shrink-0" />
                     {feature}
@@ -359,14 +369,14 @@ export default function ProductViewPage() {
                 <div className="space-y-6">
                   <div>
                     <h3 className="text-xl font-semibold text-[#8B4513] mb-3">About This Product</h3>
-                    <p className="leading-relaxed mb-4">{sampleProduct.longDescription}</p>
+                    <p className="leading-relaxed mb-4">{product.Description}</p>
                   </div>
                   
                   <div className="grid md:grid-cols-2 gap-6">
                     <div>
                       <h4 className="font-semibold text-[#8B4513] mb-2">Materials</h4>
                       <ul className="space-y-1">
-                        {sampleProduct.materials.map((material, index) => (
+                        {["100% Cotton Yarn", "Hypoallergenic", "Natural Dyes"].map((material, index) => (
                           <li key={index} className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 bg-[#CD853F] rounded-full" />
                             {material}
@@ -377,7 +387,7 @@ export default function ProductViewPage() {
                     
                     <div>
                       <h4 className="font-semibold text-[#8B4513] mb-2">Dimensions</h4>
-                      <p>{sampleProduct.dimensions}</p>
+                      <p>Varies by item - handcrafted to order</p>
                     </div>
                   </div>
                 </div>
@@ -387,7 +397,12 @@ export default function ProductViewPage() {
                 <div>
                   <h3 className="text-xl font-semibold text-[#8B4513] mb-4">Care Instructions</h3>
                   <div className="grid gap-3">
-                    {sampleProduct.careInstructions.map((instruction, index) => (
+                    {[
+                      "Hand wash cold, lay flat to dry",
+                      "Do not bleach or use harsh chemicals", 
+                      "Store in a cool, dry place",
+                      "Gentle brushing to maintain texture"
+                    ].map((instruction, index) => (
                       <div key={index} className="flex items-center gap-3 p-3 bg-white/40 rounded-lg">
                         <CheckIcon className="w-5 h-5 text-[#CD853F] flex-shrink-0" />
                         <span>{instruction}</span>
@@ -407,7 +422,7 @@ export default function ProductViewPage() {
                           <StarIcon
                             key={i}
                             className={`w-5 h-5 ${
-                              i < Math.floor(sampleProduct.reviews.rating)
+                              i < 4
                                 ? "text-[#CD853F] fill-current"
                                 : "text-gray-300"
                             }`}
@@ -415,9 +430,9 @@ export default function ProductViewPage() {
                         ))}
                       </div>
                       <span className="font-medium text-[#8B4513]">
-                        {sampleProduct.reviews.rating} out of 5
+                        4.5 out of 5
                       </span>
-                      <span className="text-sm">({sampleProduct.reviews.count} reviews)</span>
+                      <span className="text-sm">(12 reviews)</span>
                     </div>
                   </div>
                   

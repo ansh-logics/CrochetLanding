@@ -15,7 +15,6 @@ export default function NavigationWrapper() {
         items={[
           { label: 'Home', href: '/' },
           { label: 'Catalog', href: '/catalog' },
-          { label: 'Product', href: '/product' },
           { label: 'About', href: '/about' },
           { label: 'Contact', href: '/contact' }
         ]}
