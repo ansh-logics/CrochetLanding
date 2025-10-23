@@ -4,6 +4,7 @@ import "./globals.css";
 import NavigationWrapper from '@/components/NavigationWrapper';
 import FloatingCartIcon from '@/components/FloatingCartIcon';
 import { CartProvider } from '@/contexts/CartContext';
+import { QueryProvider } from '@/lib/react-query/QueryProvider';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,11 +43,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${pacifico.variable} ${tangerine.variable} antialiased`}
       >
-        <CartProvider>
-          <NavigationWrapper />
-          <FloatingCartIcon />
-          {children}
-        </CartProvider>
+        <QueryProvider>
+          <CartProvider>
+            <NavigationWrapper />
+            <FloatingCartIcon />
+            {children}
+          </CartProvider>
+        </QueryProvider>
       </body>
     </html>
   );

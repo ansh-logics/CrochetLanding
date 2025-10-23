@@ -1,6 +1,9 @@
 import { createServerClient } from "@/utils/supabase/server";
 import { NextRequest } from "next/server";
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(request: NextRequest) {
     const supabase = createServerClient();
     
@@ -65,7 +68,9 @@ export async function GET(request: NextRequest) {
         }, {
             status: 200,
             headers: {
-                'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+                'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
             }
         });
         

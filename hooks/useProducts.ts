@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface Product {
   id: number;
@@ -8,6 +8,7 @@ export interface Product {
   Price: number;
   Colors: string[];
   ImageURLs: string[];
+  ImagePublicIds?: string[];
   created_at: string;
 }
 
@@ -29,7 +30,7 @@ interface UseProductsResult {
   refresh: () => void;
 }
 
-// Enhanced cache implementation with better management
+// Simple cache implementation
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -53,31 +54,19 @@ export function useProducts(initialPage = 1, limit = 12): UseProductsResult {
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [currentSearch, setCurrentSearch] = useState('');
-  
-  // Track if initial load is complete to prevent duplicate requests
-  const hasLoadedRef = useRef(false);
-  const loadingRef = useRef(false);
 
   const loadProducts = useCallback(async (page = currentPage, search = currentSearch) => {
     const cacheKey = `products-${page}-${limit}-${search}`;
     
-    // Prevent duplicate concurrent requests
-    if (loadingRef.current) {
-      return;
-    }
-    
     // Check cache first
     const cachedData = getCached(cacheKey);
-    if (cachedData) {
+    if (cachedData && page === currentPage && search === currentSearch) {
       setProducts(cachedData.products);
       setPagination(cachedData.pagination);
       setLoading(false);
-      setCurrentPage(page);
-      setCurrentSearch(search);
       return;
     }
 
-    loadingRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -118,7 +107,6 @@ export function useProducts(initialPage = 1, limit = 12): UseProductsResult {
       console.error('Error loading products:', err);
     } finally {
       setLoading(false);
-      loadingRef.current = false;
     }
   }, [currentPage, currentSearch, limit]);
 
@@ -130,12 +118,8 @@ export function useProducts(initialPage = 1, limit = 12): UseProductsResult {
   }, [currentPage, currentSearch, limit, loadProducts]);
 
   useEffect(() => {
-    // Only load once on mount
-    if (!hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      loadProducts(initialPage, '');
-    }
-  }, [initialPage, loadProducts]);
+    loadProducts(initialPage, '');
+  }, []);
 
   return {
     products,

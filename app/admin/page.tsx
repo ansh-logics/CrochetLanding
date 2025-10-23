@@ -1,14 +1,15 @@
 "use client"
-import { CloudinaryUploadWidgetInfo } from 'next-cloudinary';
 import { useState, useEffect } from "react";
+import { Product } from "@/hooks/useProducts";
+import { CloudinaryUploadWidgetInfo } from 'next-cloudinary';
 import imageCompression from 'browser-image-compression';
-import { useProducts, Product } from '@/hooks/useProducts';
+import { useProductsQuery, useDeleteProduct } from "@/hooks/useProductsQuery";
 
-type ViewMode = 'add' | 'manage';
-type EditingProduct = Product & { newImages?: File[] };
+type AdminView = 'list' | 'add' | 'edit';
 
-export default function admin() {
-    const [viewMode, setViewMode] = useState<ViewMode>('manage');
+export default function Admin() {
+    const [currentView, setCurrentView] = useState<AdminView>('list');
+    const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [resource, setResource] = useState<string | CloudinaryUploadWidgetInfo | undefined>();
     const [step, setStep] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -18,23 +19,29 @@ export default function admin() {
         price: '',
         variantCount: ''
     });
-    const [colorVariants, setColorVariants] = useState<{ color: string; images: File[] }[]>([]);
+    const [colorVariants, setColorVariants] = useState<{ color: string; images: File[]; existingImageUrls?: string[]; existingPublicIds?: string[] }[]>([]);
     const [isCompressing, setIsCompressing] = useState(false);
-    
-    // Product management states
-    const { products, loading, error, pagination, loadProducts, refresh } = useProducts(1, 20);
-    const [editingProduct, setEditingProduct] = useState<EditingProduct | null>(null);
-    const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
+
+    // Use React Query for products
+    const { data: productsData, isLoading: loadingProducts, refetch } = useProductsQuery(1, 100);
+    const products = productsData?.products || [];
+    const deleteProductMutation = useDeleteProduct();
+
+    // Refetch products when view changes to list
+    useEffect(() => {
+        if (currentView === 'list') {
+            refetch();
+        }
+    }, [currentView, refetch]);
 
     // Image compression function
     const compressImage = async (file: File): Promise<File> => {
         const options = {
-            maxSizeMB: 8, // Maximum file size in MB (well under Cloudinary's 10MB limit)
-            maxWidthOrHeight: 1920, // Maximum width or height
-            useWebWorker: true, // Use web worker for better performance
-            fileType: 'image/jpeg', // Convert to JPEG for better compression
-            quality: 0.8 // Quality between 0-1
+            maxSizeMB: 8,
+            maxWidthOrHeight: 1920,
+            useWebWorker: true,
+            fileType: 'image/jpeg',
+            quality: 0.8
         };
 
         try {
@@ -42,7 +49,6 @@ export default function admin() {
             const compressedFile = await imageCompression(file, options);
             console.log(`Compressed to: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
             
-            // Create a new file with original name but .jpg extension
             const fileName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
             return new File([compressedFile], fileName, {
                 type: 'image/jpeg',
@@ -61,12 +67,18 @@ export default function admin() {
             [name]: value
         }));
     };
+
     const handleVariantGeneration = () => {
         const count = parseInt(formData.variantCount);
         if (count > 0) {
-            const newVariants = Array(count).fill(null).map(() => ({ color: '', images: [] as File[] }));
+            const newVariants = Array(count).fill(null).map(() => ({ 
+                color: '', 
+                images: [] as File[],
+                existingImageUrls: [],
+                existingPublicIds: []
+            }));
             setColorVariants(newVariants);
-            setStep(1); // Move to variant step
+            setStep(1);
         }
     };
 
@@ -82,7 +94,6 @@ export default function admin() {
         setIsCompressing(true);
         
         try {
-            // Compress all new files
             const compressedFiles = await Promise.all(
                 newFiles.map(file => compressImage(file))
             );
@@ -110,133 +121,75 @@ export default function admin() {
         );
     };
 
-    // Delete product handler
-    const handleDeleteProduct = async (productId: number) => {
-        if (!confirm('Are you sure you want to delete this product? This will also delete all associated images from Cloudinary.')) {
-            return;
-        }
-
-        setDeletingProductId(productId);
-
-        try {
-            const response = await fetch(`/api/delete-product/${productId}`, {
-                method: 'DELETE',
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to delete product');
-            }
-
-            alert('Product and images deleted successfully!');
-            refresh(); // Refresh the product list
-        } catch (error) {
-            console.error('Error deleting product:', error);
-            alert('Failed to delete product. Please try again.');
-        } finally {
-            setDeletingProductId(null);
-        }
-    };
-
-    // Edit product handler
-    const handleEditProduct = (product: Product) => {
-        setEditingProduct({ ...product });
-    };
-
-    // Update product handler
-    const handleUpdateProduct = async () => {
-        if (!editingProduct) return;
-
-        setIsSubmitting(true);
-
-        try {
-            let imageURLs = editingProduct.ImageURLs;
-
-            // If there are new images to upload
-            if (editingProduct.newImages && editingProduct.newImages.length > 0) {
-                const formData = new FormData();
-                editingProduct.newImages.forEach(file => {
-                    formData.append('files', file);
-                });
-
-                const uploadResponse = await fetch('/api/cloudinary-params', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!uploadResponse.ok) {
-                    throw new Error('Failed to upload new images');
+    const removeExistingImage = (variantIndex: number, imageIndex: number) => {
+        setColorVariants(prev => 
+            prev.map((variant, i) => {
+                if (i === variantIndex) {
+                    const newExistingUrls = [...(variant.existingImageUrls || [])];
+                    const newExistingPublicIds = [...(variant.existingPublicIds || [])];
+                    newExistingUrls.splice(imageIndex, 1);
+                    newExistingPublicIds.splice(imageIndex, 1);
+                    return { 
+                        ...variant, 
+                        existingImageUrls: newExistingUrls,
+                        existingPublicIds: newExistingPublicIds
+                    };
                 }
-
-                const { urls } = await uploadResponse.json();
-                imageURLs = [...imageURLs, ...urls];
-            }
-
-            const updateData = {
-                title: editingProduct.Title,
-                description: editingProduct.Description,
-                price: editingProduct.Price,
-                colors: editingProduct.Colors,
-                imageURLs: imageURLs
-            };
-
-            const response = await fetch(`/api/update-product/${editingProduct.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(updateData)
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update product');
-            }
-
-            alert('Product updated successfully!');
-            setEditingProduct(null);
-            refresh(); // Refresh the product list
-        } catch (error) {
-            console.error('Error updating product:', error);
-            alert('Failed to update product. Please try again.');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    // Search handler
-    const handleSearch = () => {
-        loadProducts(1, searchTerm);
+                return variant;
+            })
+        );
     };
 
     const handleSubmit = async () => {
         setIsSubmitting(true);
 
         try {
-            // Prepare data for submission
             const colors: string[] = [];
             const allImageUrls: string[] = [];
+            const allImagePublicIds: string[] = [];
+            const oldImagePublicIds: string[] = [];
+
+            // For editing, collect removed image public IDs
+            if (editingProduct && editingProduct.ImagePublicIds) {
+                const currentExistingIds = colorVariants.flatMap(v => v.existingPublicIds || []);
+                oldImagePublicIds.push(
+                    ...editingProduct.ImagePublicIds.filter(id => !currentExistingIds.includes(id))
+                );
+            }
 
             // Upload images for each color variant
             for (const variant of colorVariants) {
-                if (variant.color && variant.images.length > 0) {
+                if (variant.color) {
                     colors.push(variant.color);
 
-                    // Upload images for this variant
-                    const formData = new FormData();
-                    variant.images.forEach(file => {
-                        formData.append('files', file);
-                    });
-
-                    const uploadResponse = await fetch('/api/cloudinary-params', {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (!uploadResponse.ok) {
-                        throw new Error(`Failed to upload images for ${variant.color}`);
+                    // Add existing images
+                    if (variant.existingImageUrls) {
+                        allImageUrls.push(...variant.existingImageUrls);
+                    }
+                    if (variant.existingPublicIds) {
+                        allImagePublicIds.push(...variant.existingPublicIds);
                     }
 
-                    const { urls } = await uploadResponse.json();
-                    allImageUrls.push(...urls);
+                    // Upload new images if any
+                    if (variant.images.length > 0) {
+                        const formData = new FormData();
+                        variant.images.forEach(file => {
+                            formData.append('files', file);
+                        });
+
+                        const uploadResponse = await fetch('/api/cloudinary-params', {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (!uploadResponse.ok) {
+                            throw new Error(`Failed to upload images for ${variant.color}`);
+                        }
+
+                        const { urls, publicIds } = await uploadResponse.json();
+                        allImageUrls.push(...urls);
+                        allImagePublicIds.push(...publicIds);
+                    }
                 }
             }
 
@@ -245,11 +198,19 @@ export default function admin() {
                 description: formData.description,
                 price: parseFloat(formData.price),
                 colors: colors,
-                imageURLs: allImageUrls
+                imageURLs: allImageUrls,
+                imagePublicIds: allImagePublicIds,
+                ...(editingProduct && { oldImagePublicIds })
             };
 
-            const productResponse = await fetch('/api/add-product', {
-                method: 'POST',
+            const url = editingProduct 
+                ? `/api/update-product/${editingProduct.id}`
+                : '/api/add-product';
+            
+            const method = editingProduct ? 'PUT' : 'POST';
+
+            const productResponse = await fetch(url, {
+                method,
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -257,28 +218,82 @@ export default function admin() {
             });
 
             if (!productResponse.ok) {
-                throw new Error('Failed to create product');
+                throw new Error(editingProduct ? 'Failed to update product' : 'Failed to create product');
             }
 
-            alert('Product created successfully!');
+            alert(editingProduct ? 'Product updated successfully!' : 'Product created successfully!');
 
-            // Reset form
-            setFormData({ title: '', description: '', price: '', variantCount: '' });
-            setColorVariants([]);
-            setStep(0);
-            refresh(); // Refresh the product list
+            // Reset and return to list
+            resetForm();
+            setCurrentView('list');
+            refetch(); // Refetch products to show updates
 
         } catch (error) {
             console.error('Error submitting product:', error);
-            alert('Failed to create product. Please try again.');
+            alert(`Failed to ${editingProduct ? 'update' : 'create'} product. Please try again.`);
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    const handleDelete = async (productId: number) => {
+        if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            await deleteProductMutation.mutateAsync(productId);
+            alert('Product deleted successfully!');
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            alert('Failed to delete product. Please try again.');
+        }
+    };
+
+    const handleEdit = (product: Product) => {
+        setEditingProduct(product);
+        
+        // Pre-fill form data
+        setFormData({
+            title: product.Title,
+            description: product.Description,
+            price: product.Price.toString(),
+            variantCount: product.Colors.length.toString()
+        });
+
+        // Calculate images per color
+        const imagesPerColor = Math.floor(product.ImageURLs.length / product.Colors.length);
+        
+        // Pre-fill color variants with existing data
+        const variants = product.Colors.map((color, index) => {
+            const startIdx = index * imagesPerColor;
+            const endIdx = startIdx + imagesPerColor;
+            
+            return {
+                color: color,
+                images: [] as File[],
+                existingImageUrls: product.ImageURLs.slice(startIdx, endIdx),
+                existingPublicIds: product.ImagePublicIds?.slice(startIdx, endIdx) || []
+            };
+        });
+
+        setColorVariants(variants);
+        setStep(0);
+        setCurrentView('edit');
+    };
+
+    const resetForm = () => {
+        setFormData({ title: '', description: '', price: '', variantCount: '' });
+        setColorVariants([]);
+        setStep(0);
+        setEditingProduct(null);
+    };
+
     const isStep0Complete = formData.title && formData.description && formData.price && formData.variantCount;
     const isStep1Complete = colorVariants.length > 0 && colorVariants.every(v => v.color.trim() !== '');
-    const isStep2Complete = colorVariants.length > 0 && colorVariants.every(v => v.images.length > 0);
+    const isStep2Complete = colorVariants.length > 0 && colorVariants.every(v => 
+        v.images.length > 0 || (v.existingImageUrls && v.existingImageUrls.length > 0)
+    );
 
     const canProceedToNext = (currentStep: number) => {
         if (currentStep === 0) return isStep0Complete;
@@ -287,288 +302,112 @@ export default function admin() {
         return true;
     };
 
+    // Product List View
+    if (currentView === 'list') {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] px-4 py-8">
+                <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-12">
+                        <h1 className="font-tangerine text-6xl md:text-8xl font-bold text-[#8B4513] mb-4">
+                            Admin Panel
+                        </h1>
+                        <p className="text-[#A0522D] text-lg font-medium mb-6">
+                            Manage your crochet products
+                        </p>
+                        <button
+                            onClick={() => setCurrentView('add')}
+                            className="px-8 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors duration-300 font-medium shadow-lg"
+                        >
+                            + Add New Product
+                        </button>
+                    </div>
+
+                    {loadingProducts ? (
+                        <div className="text-center py-12">
+                            <div className="inline-block w-12 h-12 border-4 border-[#8B4513] border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-[#A0522D] mt-4">Loading products...</p>
+                        </div>
+                    ) : products.length === 0 ? (
+                        <div className="text-center py-12 bg-white/80 rounded-2xl">
+                            <p className="text-[#A0522D] text-lg">No products found. Add your first product!</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {products.map((product) => (
+                                <div key={product.id} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-[#CD853F]/20 hover:shadow-xl transition-shadow">
+                                    <div className="aspect-square bg-gradient-to-br from-[#F5E6D3] to-[#CD853F]/20 overflow-hidden">
+                                        {product.ImageURLs[0] ? (
+                                            <img
+                                                src={product.ImageURLs[0]}
+                                                alt={product.Title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <span className="text-[#A0522D]/40">No Image</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-6">
+                                        <h3 className="font-semibold text-xl text-[#8B4513] mb-2 truncate">
+                                            {product.Title}
+                                        </h3>
+                                        <p className="text-[#A0522D] text-sm mb-3 line-clamp-2">
+                                            {product.Description}
+                                        </p>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <span className="text-2xl font-bold text-[#8B4513]">
+                                                ${product.Price.toFixed(2)}
+                                            </span>
+                                            <span className="text-sm text-[#A0522D]">
+                                                {product.Colors.length} colors
+                                            </span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleEdit(product)}
+                                                className="flex-1 px-4 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-lg hover:bg-[#A0522D] transition-colors font-medium"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(product.id)}
+                                                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Add/Edit Form View
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#FFF8F0] to-[#F5E6D3] px-4 py-8">
             <div className="max-w-7xl mx-auto">
                 <div className="text-center mb-8">
+                    <button
+                        onClick={() => {
+                            resetForm();
+                            setCurrentView('list');
+                        }}
+                        className="mb-4 px-6 py-2 border border-[#CD853F] text-[#8B4513] rounded-full hover:bg-[#8B4513] hover:text-[#FFF8F0] transition-all duration-300 font-medium"
+                    >
+                        ← Back to Products
+                    </button>
                     <h1 className="font-tangerine text-6xl md:text-8xl font-bold text-[#8B4513] mb-4">
-                        Admin Panel
+                        {editingProduct ? 'Edit Product' : 'Add New Product'}
                     </h1>
-                    <p className="text-[#A0522D] text-lg font-medium mb-6">
-                        Manage your crochet collection
+                    <p className="text-[#A0522D] text-lg font-medium">
+                        {editingProduct ? 'Update product details' : 'Add new products to your crochet collection'}
                     </p>
-                    
-                    {/* View Mode Toggle */}
-                    <div className="flex justify-center gap-4 mb-8">
-                        <button
-                            onClick={() => setViewMode('manage')}
-                            className={`px-8 py-3 rounded-full font-medium transition-all duration-300 ${
-                                viewMode === 'manage'
-                                    ? 'bg-[#8B4513] text-[#FFF8F0] shadow-lg'
-                                    : 'bg-white/80 text-[#8B4513] hover:bg-white'
-                            }`}
-                        >
-                            📦 Manage Products
-                        </button>
-                        <button
-                            onClick={() => setViewMode('add')}
-                            className={`px-8 py-3 rounded-full font-medium transition-all duration-300 ${
-                                viewMode === 'add'
-                                    ? 'bg-[#8B4513] text-[#FFF8F0] shadow-lg'
-                                    : 'bg-white/80 text-[#8B4513] hover:bg-white'
-                            }`}
-                        >
-                            ➕ Add New Product
-                        </button>
-                    </div>
                 </div>
-
-                {/* Manage Products View */}
-                {viewMode === 'manage' && (
-                    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 md:p-8 border border-[#CD853F]/20">
-                        {/* Search Bar */}
-                        <div className="mb-6 flex gap-3">
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                                placeholder="Search products by name or description..."
-                                className="flex-1 px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90 placeholder-[#A0522D]/60"
-                            />
-                            <button
-                                onClick={handleSearch}
-                                className="px-6 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-xl hover:bg-[#A0522D] transition-colors duration-300 font-medium"
-                            >
-                                Search
-                            </button>
-                            <button
-                                onClick={() => { setSearchTerm(''); loadProducts(1, ''); }}
-                                className="px-6 py-3 bg-white text-[#8B4513] border-2 border-[#8B4513] rounded-xl hover:bg-[#F5E6D3] transition-colors duration-300 font-medium"
-                            >
-                                Clear
-                            </button>
-                        </div>
-
-                        {/* Loading State */}
-                        {loading && (
-                            <div className="text-center py-12">
-                                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#8B4513]"></div>
-                                <p className="text-[#A0522D] mt-4">Loading products...</p>
-                            </div>
-                        )}
-
-                        {/* Error State */}
-                        {error && !loading && (
-                            <div className="text-center py-12">
-                                <p className="text-red-600 mb-4">{error}</p>
-                                <button
-                                    onClick={refresh}
-                                    className="px-6 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors"
-                                >
-                                    Retry
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Products Grid */}
-                        {!loading && !error && products.length > 0 && (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                                    {products.map((product) => (
-                                        <div
-                                            key={product.id}
-                                            className="bg-white rounded-xl shadow-lg overflow-hidden border border-[#CD853F]/10 hover:shadow-xl transition-shadow duration-300"
-                                        >
-                                            <div className="aspect-square relative bg-gradient-to-br from-[#F5E6D3] to-[#CD853F]/20">
-                                                <img
-                                                    src={product.ImageURLs[0] || '/placeholder-image.jpg'}
-                                                    alt={product.Title}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            </div>
-                                            <div className="p-4">
-                                                <h3 className="font-semibold text-lg text-[#8B4513] mb-2 truncate">
-                                                    {product.Title}
-                                                </h3>
-                                                <p className="text-[#A0522D] text-sm mb-2 line-clamp-2">
-                                                    {product.Description}
-                                                </p>
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <span className="text-xl font-bold text-[#8B4513]">
-                                                        ${product.Price}
-                                                    </span>
-                                                    <div className="flex gap-1">
-                                                        {product.Colors.slice(0, 3).map((color, idx) => (
-                                                            <span
-                                                                key={idx}
-                                                                className="px-2 py-1 bg-[#F5E6D3] text-[#8B4513] rounded text-xs"
-                                                            >
-                                                                {color}
-                                                            </span>
-                                                        ))}
-                                                        {product.Colors.length > 3 && (
-                                                            <span className="px-2 py-1 bg-[#F5E6D3] text-[#8B4513] rounded text-xs">
-                                                                +{product.Colors.length - 3}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleEditProduct(product)}
-                                                        className="flex-1 px-4 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-lg hover:bg-[#A0522D] transition-colors duration-300 text-sm font-medium"
-                                                    >
-                                                        ✏️ Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteProduct(product.id)}
-                                                        disabled={deletingProductId === product.id}
-                                                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-300 text-sm font-medium disabled:opacity-50"
-                                                    >
-                                                        {deletingProductId === product.id ? '🔄' : '🗑️'} Delete
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Pagination */}
-                                {pagination && pagination.totalPages > 1 && (
-                                    <div className="flex justify-center items-center gap-4">
-                                        <button
-                                            onClick={() => loadProducts(pagination.currentPage - 1, searchTerm)}
-                                            disabled={!pagination.hasPrevPage}
-                                            className="px-4 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-lg hover:bg-[#A0522D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            Previous
-                                        </button>
-                                        <span className="text-[#8B4513] font-medium">
-                                            Page {pagination.currentPage} of {pagination.totalPages}
-                                        </span>
-                                        <button
-                                            onClick={() => loadProducts(pagination.currentPage + 1, searchTerm)}
-                                            disabled={!pagination.hasNextPage}
-                                            className="px-4 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-lg hover:bg-[#A0522D] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            Next
-                                        </button>
-                                    </div>
-                                )}
-                            </>
-                        )}
-
-                        {/* Empty State */}
-                        {!loading && !error && products.length === 0 && (
-                            <div className="text-center py-12">
-                                <div className="text-6xl mb-4">📦</div>
-                                <h3 className="text-xl font-semibold text-[#8B4513] mb-2">No Products Found</h3>
-                                <p className="text-[#A0522D] mb-6">
-                                    {searchTerm ? 'Try a different search term' : 'Start by adding your first product'}
-                                </p>
-                                {!searchTerm && (
-                                    <button
-                                        onClick={() => setViewMode('add')}
-                                        className="px-6 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors duration-300 font-medium"
-                                    >
-                                        Add First Product
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* Edit Product Modal */}
-                {editingProduct && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                            <div className="p-6 border-b border-[#CD853F]/20">
-                                <h2 className="text-2xl font-semibold text-[#8B4513]">Edit Product</h2>
-                            </div>
-                            <div className="p-6 space-y-4">
-                                <div>
-                                    <label className="block text-[#8B4513] font-medium mb-2">Title</label>
-                                    <input
-                                        type="text"
-                                        value={editingProduct.Title}
-                                        onChange={(e) => setEditingProduct({ ...editingProduct, Title: e.target.value })}
-                                        className="w-full px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[#8B4513] font-medium mb-2">Description</label>
-                                    <textarea
-                                        value={editingProduct.Description}
-                                        onChange={(e) => setEditingProduct({ ...editingProduct, Description: e.target.value })}
-                                        rows={4}
-                                        className="w-full px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90 resize-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[#8B4513] font-medium mb-2">Price</label>
-                                    <input
-                                        type="number"
-                                        value={editingProduct.Price}
-                                        onChange={(e) => setEditingProduct({ ...editingProduct, Price: parseFloat(e.target.value) })}
-                                        step="0.01"
-                                        className="w-full px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[#8B4513] font-medium mb-2">Colors (comma-separated)</label>
-                                    <input
-                                        type="text"
-                                        value={editingProduct.Colors.join(', ')}
-                                        onChange={(e) => setEditingProduct({ 
-                                            ...editingProduct, 
-                                            Colors: e.target.value.split(',').map(c => c.trim()).filter(c => c)
-                                        })}
-                                        className="w-full px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[#8B4513] font-medium mb-2">Current Images</label>
-                                    <div className="grid grid-cols-4 gap-2 mb-4">
-                                        {editingProduct.ImageURLs.map((url, idx) => (
-                                            <div key={idx} className="relative group">
-                                                <img src={url} alt={`Product ${idx + 1}`} className="w-full h-20 object-cover rounded-lg" />
-                                                <button
-                                                    onClick={() => {
-                                                        const newUrls = editingProduct.ImageURLs.filter((_, i) => i !== idx);
-                                                        setEditingProduct({ ...editingProduct, ImageURLs: newUrls });
-                                                    }}
-                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-6 border-t border-[#CD853F]/20 flex justify-end gap-3">
-                                <button
-                                    onClick={() => setEditingProduct(null)}
-                                    className="px-6 py-2 border border-[#CD853F] text-[#8B4513] rounded-full hover:bg-[#F5E6D3] transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleUpdateProduct}
-                                    disabled={isSubmitting}
-                                    className="px-6 py-2 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors disabled:opacity-50"
-                                >
-                                    {isSubmitting ? 'Saving...' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Add Product View */}
-                {viewMode === 'add' && (
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-[#CD853F]/20">
@@ -601,7 +440,7 @@ export default function admin() {
                                     {step === 0 ? 'Enter basic product information' :
                                      step === 1 ? 'Set up color variants for your product' :
                                      step === 2 ? 'Add images for each color variant' :
-                                     'Review everything before adding to catalog'}
+                                     'Review everything before saving'}
                                 </p>
                             </div>
                         </div>
@@ -659,17 +498,25 @@ export default function admin() {
                                                 step="1"
                                                 min="1"
                                                 max="10"
-                                                className="flex-1 px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90 placeholder-[#A0522D]/60"
+                                                disabled={!!editingProduct}
+                                                className="flex-1 px-4 py-3 border border-[#CD853F]/30 rounded-xl focus:ring-2 focus:ring-[#8B4513] focus:border-transparent bg-white/90 placeholder-[#A0522D]/60 disabled:opacity-50"
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={handleVariantGeneration}
-                                                disabled={!formData.variantCount || parseInt(formData.variantCount) < 1}
-                                                className="px-6 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-xl hover:bg-[#A0522D] transition-colors duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                Generate Variants
-                                            </button>
+                                            {!editingProduct && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleVariantGeneration}
+                                                    disabled={!formData.variantCount || parseInt(formData.variantCount) < 1}
+                                                    className="px-6 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-xl hover:bg-[#A0522D] transition-colors duration-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Generate Variants
+                                                </button>
+                                            )}
                                         </div>
+                                        {editingProduct && (
+                                            <p className="text-sm text-[#A0522D] mt-2">
+                                                Number of variants cannot be changed when editing
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -717,6 +564,30 @@ export default function admin() {
                                                 {variant.color || `Variant ${variantIndex + 1}`}
                                             </h4>
                                             
+                                            {/* Existing Images */}
+                                            {variant.existingImageUrls && variant.existingImageUrls.length > 0 && (
+                                                <div className="mb-4">
+                                                    <p className="text-sm text-[#A0522D] mb-2 font-medium">Current Images:</p>
+                                                    <div className="grid grid-cols-3 gap-3 mb-4">
+                                                        {variant.existingImageUrls.map((url, imageIndex) => (
+                                                            <div key={imageIndex} className="relative group">
+                                                                <img
+                                                                    src={url}
+                                                                    alt={`${variant.color} existing ${imageIndex + 1}`}
+                                                                    className="w-full h-24 object-cover rounded-lg"
+                                                                />
+                                                                <button
+                                                                    onClick={() => removeExistingImage(variantIndex, imageIndex)}
+                                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             <div className="border-2 border-dashed border-[#CD853F] rounded-xl p-8 bg-white/50 mb-4">
                                                 <div className="text-center">
                                                     <div className="w-12 h-12 mx-auto bg-[#8B4513]/10 rounded-full flex items-center justify-center mb-3">
@@ -746,7 +617,7 @@ export default function admin() {
                                                                 : 'bg-[#8B4513] text-[#FFF8F0] hover:bg-[#A0522D]'
                                                         }`}
                                                     >
-                                                        {isCompressing ? 'Compressing...' : 'Select Images'}
+                                                        {isCompressing ? 'Compressing...' : 'Select New Images'}
                                                     </label>
                                                     <p className="text-xs text-[#A0522D] mt-2">
                                                         Images will be automatically compressed for optimal upload
@@ -759,23 +630,27 @@ export default function admin() {
                                                 </div>
                                             </div>
 
+                                            {/* New Images */}
                                             {variant.images.length > 0 && (
-                                                <div className="grid grid-cols-3 gap-3">
-                                                    {variant.images.map((file, imageIndex) => (
-                                                        <div key={imageIndex} className="relative group">
-                                                            <img
-                                                                src={URL.createObjectURL(file)}
-                                                                alt={`${variant.color} variant ${imageIndex + 1}`}
-                                                                className="w-full h-24 object-cover rounded-lg"
-                                                            />
-                                                            <button
-                                                                onClick={() => removeVariantImage(variantIndex, imageIndex)}
-                                                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs"
-                                                            >
-                                                                ×
-                                                            </button>
-                                                        </div>
-                                                    ))}
+                                                <div>
+                                                    <p className="text-sm text-[#A0522D] mb-2 font-medium">New Images to Upload:</p>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        {variant.images.map((file, imageIndex) => (
+                                                            <div key={imageIndex} className="relative group">
+                                                                <img
+                                                                    src={URL.createObjectURL(file)}
+                                                                    alt={`${variant.color} new ${imageIndex + 1}`}
+                                                                    className="w-full h-24 object-cover rounded-lg border-2 border-green-400"
+                                                                />
+                                                                <button
+                                                                    onClick={() => removeVariantImage(variantIndex, imageIndex)}
+                                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-sm font-bold"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
@@ -786,7 +661,9 @@ export default function admin() {
                             {step === 3 && (
                                 <div className="text-center space-y-6">
                                     <div className="bg-[#FFF8F0]/50 rounded-2xl p-8 border border-[#CD853F]/20">
-                                        <h3 className="text-xl font-semibold text-[#8B4513] mb-4">Ready to Add Product?</h3>
+                                        <h3 className="text-xl font-semibold text-[#8B4513] mb-4">
+                                            {editingProduct ? 'Ready to Update Product?' : 'Ready to Add Product?'}
+                                        </h3>
                                         <p className="text-[#A0522D] mb-6">
                                             Review your product details in the preview panel and click submit when ready.
                                         </p>
@@ -795,9 +672,9 @@ export default function admin() {
                                             disabled={isSubmitting || isCompressing}
                                             className="px-12 py-4 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors duration-300 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            {isSubmitting ? 'Creating Product...' : 
+                                            {isSubmitting ? (editingProduct ? 'Updating...' : 'Creating Product...') : 
                                              isCompressing ? 'Compressing Images...' : 
-                                             'Add to Catalog'}
+                                             (editingProduct ? 'Update Product' : 'Add to Catalog')}
                                         </button>
                                     </div>
                                 </div>
@@ -829,17 +706,35 @@ export default function admin() {
                         </div>
                     </div>
 
+                    {/* Preview Panel */}
                     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 border border-[#CD853F]/20">
                         <h3 className="text-2xl font-semibold text-[#8B4513] mb-6 text-center">Live Preview</h3>
 
                         <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-[#CD853F]/10">
                             <div className="aspect-square bg-gradient-to-br from-[#F5E6D3] to-[#CD853F]/20 flex items-center justify-center">
-                                {colorVariants.length > 0 && colorVariants[0].images.length > 0 ? (
-                                    <img
-                                        src={URL.createObjectURL(colorVariants[0].images[0])}
-                                        alt="Product preview"
-                                        className="w-full h-full object-cover"
-                                    />
+                                {colorVariants.length > 0 ? (
+                                    colorVariants[0].images.length > 0 ? (
+                                        <img
+                                            src={URL.createObjectURL(colorVariants[0].images[0])}
+                                            alt="Product preview"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : colorVariants[0].existingImageUrls && colorVariants[0].existingImageUrls.length > 0 ? (
+                                        <img
+                                            src={colorVariants[0].existingImageUrls[0]}
+                                            alt="Product preview"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 mx-auto bg-[#8B4513]/10 rounded-full flex items-center justify-center mb-3">
+                                                <svg className="w-8 h-8 text-[#8B4513]/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-[#A0522D]/60 text-sm">Upload images to see preview</p>
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="text-center">
                                         <div className="w-16 h-16 mx-auto bg-[#8B4513]/10 rounded-full flex items-center justify-center mb-3">
@@ -902,11 +797,11 @@ export default function admin() {
                             <div className="space-y-2 text-sm">
                                 <div className="flex items-center justify-between">
                                     <span className="text-[#A0522D]">Product Details</span>
-                                    <span className={`w-3 h-3 rounded-full ${formData.title && formData.description && formData.price && formData.variantCount ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                                    <span className={`w-3 h-3 rounded-full ${isStep0Complete ? 'bg-green-500' : 'bg-gray-300'}`}></span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-[#A0522D]">Color Variants Set</span>
-                                    <span className={`w-3 h-3 rounded-full ${colorVariants.length > 0 && colorVariants.every(v => v.color) ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                                    <span className={`w-3 h-3 rounded-full ${isStep1Complete ? 'bg-green-500' : 'bg-gray-300'}`}></span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <span className="text-[#A0522D]">Images Uploaded</span>
@@ -919,7 +814,6 @@ export default function admin() {
                         </div>
                     </div>
                 </div>
-                )}
             </div>
         </div>
     );

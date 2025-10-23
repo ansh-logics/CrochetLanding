@@ -31,7 +31,7 @@ export async function POST(request: NextRequest){
         const uploadPromises = files.map(async(file) =>{
             const bytes = await file.arrayBuffer();
             const buffer = Buffer.from(bytes);
-            return new Promise ((resolve, reject)=>{
+            return new Promise<{url: string, publicId: string}>((resolve, reject)=>{
                 cloudinary.uploader.upload_stream(
                     {
                         resource_type: 'image',
@@ -45,15 +45,23 @@ export async function POST(request: NextRequest){
                         if (error){
                             reject(error);
                         }
-                        else{
-                            resolve(result?.secure_url);
+                        else if (result){
+                            resolve({
+                                url: result.secure_url,
+                                publicId: result.public_id
+                            });
+                        } else {
+                            reject(new Error('Upload failed - no result'));
                         }
                     }
                 ).end(buffer);
             });
         });
-        const urls = await Promise.all(uploadPromises);
-        return Response.json({urls});
+        const uploadResults = await Promise.all(uploadPromises);
+        return Response.json({
+            urls: uploadResults.map(r => r.url),
+            publicIds: uploadResults.map(r => r.publicId)
+        });
     }catch(error){
         console.error("upload error:", error);
         return Response.json({error: 'Upload failed'}, {status: 500});

@@ -8,6 +8,7 @@ export interface Product {
   Price: number;
   Colors: string[];
   ImageURLs: string[];
+  ImagePublicIds?: string[];
   created_at: string;
 }
 

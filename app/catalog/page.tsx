@@ -1,30 +1,38 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useProducts } from "@/hooks/useProducts";
+import { useProductsQuery } from "@/hooks/useProductsQuery";
 import ProductCard from "@/components/ProductCard";
 import { ProductGridSkeleton } from "@/components/ProductCardSkeleton";
 import Pagination from "@/components/Pagination";
 
 export default function Catalog() {
+  const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const { products, loading, error, pagination, loadProducts } = useProducts(1, 12);
+  
+  const { data, isLoading: loading, error: queryError } = useProductsQuery(currentPage, 12, debouncedSearch);
+  const products = data?.products || [];
+  const pagination = data?.pagination || null;
+  const error = queryError ? "Failed to load products" : null;
 
   // Debounced search handler
-  const handleSearch = useCallback((value: string) => {
-    setSearchTerm(value);
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
-      setDebouncedSearch(value);
-      loadProducts(1, value);
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1); // Reset to first page on search
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [loadProducts]);
+  }, [searchTerm]);
+
+  const handleSearch = useCallback((value: string) => {
+    setSearchTerm(value);
+  }, []);
 
   const handlePageChange = (page: number) => {
-    loadProducts(page, debouncedSearch);
+    setCurrentPage(page);
     // Scroll to top of products
     document.getElementById('products-section')?.scrollIntoView({ 
       behavior: 'smooth' 
@@ -153,7 +161,7 @@ export default function Catalog() {
                 onClick={() => {
                   setSearchTerm("");
                   setDebouncedSearch("");
-                  loadProducts(1, "");
+                  setCurrentPage(1);
                 }}
                 className="px-6 py-3 bg-[#8B4513] text-[#FFF8F0] rounded-full hover:bg-[#A0522D] transition-colors duration-300 font-medium"
               >
